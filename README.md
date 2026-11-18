@@ -1,54 +1,110 @@
-# BMI Tracker – Flutter Frontend
+# BMI Calculator
 
-A BMI calculator and tracker built with Flutter. This version uses simulated in-memory services; it does not connect to a real backend.
+A modern **BMI (Body Mass Index) Calculator** built with **Flutter and Dart**. This application provides a clean health-focused dashboard where users can calculate their BMI, review previous results, and track changes over time.
 
 ## Features
-- BMI calculation with input validation
-- BMI category result
-- Comparison with the previous measurement
-- BMI history and a simple trend chart
-- Profile viewing and editing
-- Navigation drawer
-- Simulated loading delays for mock service calls
 
-## Project structure
+- **BMI Calculation:** Calculate Body Mass Index using height and weight.
+- **Health Dashboard:** View BMI results and related information.
+- **BMI History:** Review previously calculated BMI records.
+- **Result Comparison:** Compare your latest BMI result with previous records.
+- **BMI Chart:** Visualize BMI information.
+- **Profile Management:** View and manage user profile information.
+- **Settings:** Access application settings.
+- **About Screen:** View information about the application.
+- **Dark Theme:** Consistent, modern health-tech interface.
+
+## Screenshots
+
+| Home | History |
+|:---:|:---:|
+| ![Home](assets/screenshots/home.png) | ![History](assets/screenshots/history.png) |
+
+| Comparison | Profile |
+|:---:|:---:|
+| ![Comparison](assets/screenshots/comparison.png) | ![Profile](assets/screenshots/profile.png) |
+
+| Settings |
+|:---:|
+| ![Settings](assets/screenshots/settings.png) |
+
+## Tech Stack
+
+- **Flutter** – Cross-platform UI framework.
+- **Dart** – Application programming language.
+- **Material Design** – UI components and styling.
+
+## Project Structure
 
 ```text
 lib/
-├── main.dart
+├── bars/
 ├── models/
-│   ├── user_model.dart
-│   └── bmi_record.dart
-├── services/
-│   ├── mock_user_service.dart
-│   └── mock_bmi_service.dart
 ├── screens/
-│   ├── homepage.dart
-│   ├── profile_screen.dart
-│   ├── history_screen.dart
-│   ├── settings_screen.dart
-│   └── about_screen.dart
+├── services/
+├── theme/
 ├── widgets/
-│   ├── app_drawer.dart
-│   ├── bmi_result_card.dart
-│   ├── bmi_comparison_card.dart
-│   └── bmi_chart.dart
-└── theme/
-    └── app_theme.dart
+└── main.dart
 ```
 
-## Run
-Copy the `lib/` folder into an existing Flutter project, keeping your existing `pubspec.yaml`, then run:
+### Architecture
+
+The project uses a modular structure to separate responsibilities:
+
+- `models/` – Data models for users and BMI records.
+- `screens/` – Application screens.
+- `services/` – Services for managing user and BMI data.
+- `theme/` – Application theme and color configuration.
+- `widgets/` – Reusable UI components.
+- `bars/` – Custom interface components.
+
+## Getting Started
+
+### Prerequisites
+
+- Flutter SDK
+- Dart SDK
+- Visual Studio Code or Android Studio
+- An Android emulator or physical device
+
+### Installation
+
+1. Clone the repository:
+
+```bash
+git clone https://github.com/ARK13-org/Flutter-Bmi-Calculator.git
+```
+
+2. Navigate to the project directory:
+
+```bash
+cd Flutter-Bmi-Calculator
+```
+
+3. Install dependencies:
 
 ```bash
 flutter pub get
+```
+
+4. Run the application:
+
+```bash
 flutter run
 ```
 
-No additional package dependencies are required beyond Flutter.
+## Current Implementation
 
-## Mock data behavior
-`MockUserService` and `MockBmiService` simulate future API calls with short delays. BMI records and profile changes are held in memory and reset when the app process restarts. The services are intentionally separated from the UI so they can later be replaced with HTTP/API implementations.
+The current version uses mock services for BMI records and user information. Data is managed locally in memory and is not permanently stored.
 
-## Notes
-BMI is a screening measure, not a diagnosis. Interpret results in context; BMI alone does not determine an individual's health.
+A FastAPI backend is planned as a separate development phase.
+
+## Disclaimer
+
+BMI is a general screening measurement and does not independently determine an individual's health. This application is intended for educational and informational purposes, not as a substitute for professional medical advice.
+
+## Author
+
+**ARK13-org**
+
+GitHub: [ARK13-org](https://github.com/ARK13-org)
