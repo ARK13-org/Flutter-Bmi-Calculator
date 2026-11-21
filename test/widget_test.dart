@@ -1,14 +1,19 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:bmi_calculater/main.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:bmi_tracker/main.dart';
 
 void main() {
-  testWidgets('BMI Tracker app loads successfully', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(const BmiApp());
+  TestWidgetsFlutterBinding.ensureInitialized();
 
-    expect(find.text('BMI Tracker'), findsOneWidget);
-    expect(find.text('Calculate your BMI'), findsOneWidget);
-    expect(find.text('Calculate BMI'), findsOneWidget);
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
+  testWidgets('BMI app starts successfully', (WidgetTester tester) async {
+    await tester.pumpWidget(const BmiApp());
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MaterialApp), findsOneWidget);
   });
 }

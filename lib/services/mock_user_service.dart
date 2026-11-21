@@ -1,12 +1,13 @@
 import '../models/user_model.dart';
 
-/// In-memory stand-in for future user/profile API endpoints.
+/// In-memory stand-in for user/profile API endpoints.
 class MockUserService {
   MockUserService._();
+
   static final instance = MockUserService._();
 
-  final UserModel _user = UserModel(
-    id: 'user-001',
+  static UserModel _user = const UserModel(
+    id: 1,
     name: 'Alex Morgan',
     email: 'alex@example.com',
     age: 25,
@@ -20,16 +21,22 @@ class MockUserService {
 
   Future<UserModel> updateProfile({
     required String name,
-    required String email,
     required int age,
     required double heightCm,
+    String? email,
   }) async {
     await Future.delayed(const Duration(milliseconds: 350));
-    _user
-      ..name = name
-      ..email = email
-      ..age = age
-      ..heightCm = heightCm;
+
+    // UserModel fields are final, so create a new instance.
+    _user = UserModel(
+      id: _user.id,
+      name: name,
+      email: email ?? _user.email,
+      age: age,
+      heightCm: heightCm,
+      createdAt: _user.createdAt,
+    );
+
     return _user;
   }
 }

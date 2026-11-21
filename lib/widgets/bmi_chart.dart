@@ -1,253 +1,92 @@
 import 'package:flutter/material.dart';
-
 import '../models/bmi_record.dart';
 import '../theme/app_theme.dart';
 
 class BmiChart extends StatelessWidget {
   final List<BmiRecord> records;
-
   const BmiChart({super.key, required this.records});
-
   @override
   Widget build(BuildContext context) {
-    final items = records.reversed.take(7).toList();
-
-    if (items.isEmpty) {
-      return const SizedBox.shrink();
+    final values = records.reversed.take(8).map((e) => e.bmi).toList();
+    if (values.length < 2) {
+      return const Card(
+          child: Padding(
+              padding: EdgeInsets.all(18),
+              child: Text('Add more measurements to see your BMI trend.')));
     }
-
-    final values = items.map((record) => record.bmi).toList();
-
-    final minValue = values.reduce((a, b) => a < b ? a : b);
-    final maxValue = values.reduce((a, b) => a > b ? a : b);
-
-    final difference = maxValue - minValue;
-    final chartMin = minValue - (difference == 0 ? 2 : difference * 0.25);
-    final chartMax = maxValue + (difference == 0 ? 2 : difference * 0.25);
-
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'BMI history',
-                  style: TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Icon(Icons.show_chart, color: AppTheme.primary),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '${items.length} recent measurements',
-              style: const TextStyle(
-                color: AppTheme.textSecondary,
-                fontSize: 12,
-              ),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              height: 170,
-              width: double.infinity,
-              child: CustomPaint(
-                painter: _BmiChartPainter(
-                  values: values,
-                  minValue: chartMin,
-                  maxValue: chartMax,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  _formatDate(items.first.createdAt),
-                  style: const TextStyle(
-                    color: AppTheme.textSecondary,
-                    fontSize: 10,
-                  ),
-                ),
-                Text(
-                  _formatDate(items.last.createdAt),
-                  style: const TextStyle(
-                    color: AppTheme.textSecondary,
-                    fontSize: 10,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 15),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: items.map((record) {
-                return Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppTheme.background,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppTheme.border),
-                  ),
-                  child: Text(
-                    record.bmi.toStringAsFixed(1),
-                    style: const TextStyle(
-                      color: AppTheme.primary,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 11,
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.month}/${date.day}';
+        child: Padding(
+            padding: const EdgeInsets.all(18),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('BMI trend',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+              const SizedBox(height: 18),
+              SizedBox(
+                  height: 150,
+                  width: double.infinity,
+                  child: CustomPaint(painter: _TrendPainter(values))),
+              const SizedBox(height: 8),
+              const Text('Showing your most recent measurements',
+                  style:
+                      TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+            ])));
   }
 }
 
-class _BmiChartPainter extends CustomPainter {
+class _TrendPainter extends CustomPainter {
   final List<double> values;
-  final double minValue;
-  final double maxValue;
-
-  _BmiChartPainter({
-    required this.values,
-    required this.minValue,
-    required this.maxValue,
-  });
-
+  _TrendPainter(this.values);
   @override
   void paint(Canvas canvas, Size size) {
-    if (values.isEmpty) return;
-
-    const horizontalPadding = 8.0;
-    const topPadding = 20.0;
-    const bottomPadding = 20.0;
-
-    final chartWidth = size.width - horizontalPadding * 2;
-    final chartHeight = size.height - topPadding - bottomPadding;
-
-    final gridPaint = Paint()
-      ..color = AppTheme.border
-      ..strokeWidth = 1;
-
-    for (int i = 0; i < 4; i++) {
-      final y = topPadding + (chartHeight / 3) * i;
-
-      canvas.drawLine(
-        Offset(horizontalPadding, y),
-        Offset(size.width - horizontalPadding, y),
-        gridPaint,
-      );
-    }
-
+    final minV = (values.reduce((a, b) => a < b ? a : b) - 1).floorToDouble();
+    final maxV = (values.reduce((a, b) => a > b ? a : b) + 1).ceilToDouble();
     final points = <Offset>[];
-
-    for (int i = 0; i < values.length; i++) {
+    for (var i = 0; i < values.length; i++) {
       final x = values.length == 1
           ? size.width / 2
-          : horizontalPadding + (chartWidth / (values.length - 1)) * i;
-
-      final normalized = (values[i] - minValue) / (maxValue - minValue);
-
-      final y = topPadding + chartHeight * (1 - normalized);
-
+          : i * size.width / (values.length - 1);
+      final y = size.height -
+          ((values[i] - minV) / (maxV - minV)) * (size.height - 22) -
+          8;
       points.add(Offset(x, y));
     }
-
-    if (points.length > 1) {
-      final areaPath = Path()
-        ..moveTo(points.first.dx, size.height - bottomPadding);
-
-      for (final point in points) {
-        areaPath.lineTo(point.dx, point.dy);
-      }
-
-      areaPath
-        ..lineTo(points.last.dx, size.height - bottomPadding)
-        ..close();
-
-      final areaPaint = Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            AppTheme.primary.withValues(alpha: 0.25),
-            AppTheme.primary.withValues(alpha: 0.01),
-          ],
-        ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
-
-      canvas.drawPath(areaPath, areaPaint);
+    final grid = Paint()
+      ..color = AppTheme.border.withValues(alpha: .7)
+      ..strokeWidth = 1;
+    for (var i = 0; i < 4; i++) {
+      final y = i * size.height / 3;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), grid);
     }
-
-    final linePaint = Paint()
+    final line = Paint()
       ..color = AppTheme.primary
       ..strokeWidth = 3
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
-
-    final linePath = Path();
-
-    for (int i = 0; i < points.length; i++) {
-      if (i == 0) {
-        linePath.moveTo(points[i].dx, points[i].dy);
-      } else {
-        linePath.lineTo(points[i].dx, points[i].dy);
-      }
+    final path = Path()..moveTo(points.first.dx, points.first.dy);
+    for (final p in points.skip(1)) {
+      path.lineTo(p.dx, p.dy);
     }
-
-    canvas.drawPath(linePath, linePaint);
-
-    final pointPaint = Paint()..color = AppTheme.primary;
-
-    final borderPaint = Paint()..color = AppTheme.surface;
-
-    for (int i = 0; i < points.length; i++) {
-      canvas.drawCircle(points[i], 6, borderPaint);
-      canvas.drawCircle(points[i], 4, pointPaint);
-
-      final textPainter = TextPainter(
-        text: TextSpan(
-          text: values[i].toStringAsFixed(1),
-          style: const TextStyle(
-            color: AppTheme.textPrimary,
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-
-      final textX = (points[i].dx - textPainter.width / 2).clamp(
-        0.0,
-        size.width - textPainter.width,
-      );
-
-      textPainter.paint(canvas, Offset(textX, points[i].dy - 19));
+    canvas.drawPath(path, line);
+    final dot = Paint()..color = AppTheme.primary;
+    for (var i = 0; i < points.length; i++) {
+      canvas.drawCircle(points[i], 4, dot);
+      final tp = TextPainter(
+          text: TextSpan(
+              text: values[i].toStringAsFixed(1),
+              style:
+                  const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
+          textDirection: TextDirection.ltr)
+        ..layout();
+      tp.paint(
+          canvas,
+          Offset(
+              (points[i].dx - tp.width / 2).clamp(0.0, size.width - tp.width),
+              (points[i].dy - 19).clamp(0.0, size.height - tp.height)));
     }
   }
 
   @override
-  bool shouldRepaint(covariant _BmiChartPainter oldDelegate) {
-    return oldDelegate.values != values ||
-        oldDelegate.minValue != minValue ||
-        oldDelegate.maxValue != maxValue;
-  }
+  bool shouldRepaint(covariant _TrendPainter oldDelegate) =>
+      oldDelegate.values != values;
 }

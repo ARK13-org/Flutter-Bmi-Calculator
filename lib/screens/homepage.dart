@@ -245,7 +245,6 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ],
                   ),
-
                   if (_error != null) ...[
                     const SizedBox(height: 12),
                     Text(
@@ -256,9 +255,7 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ),
                   ],
-
                   const SizedBox(height: 18),
-
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(

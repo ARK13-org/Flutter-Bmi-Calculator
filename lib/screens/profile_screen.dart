@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-
 import '../models/user_model.dart';
-import '../services/mock_user_service.dart';
+import '../services/api_client.dart';
+import '../services/user_service.dart';
+import '../services/settings_service.dart';
+import '../utils/units.dart';
 import '../theme/app_theme.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -12,6 +14,10 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   UserModel? _user;
+  bool _loading = true;
+  bool _saving = false;
+  String? _error;
+  String _unitSystem = 'metric';
   @override
   void initState() {
     super.initState();
@@ -19,137 +25,152 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _load() async {
-    final user = await MockUserService.instance.getProfile();
-    if (mounted) setState(() => _user = user);
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final values = await Future.wait(
+          [UserService.instance.getProfile(), SettingsService.instance.get()]);
+      _user = values[0] as UserModel;
+      _unitSystem =
+          ((values[1] as Map<String, dynamic>)['unit_system'] ?? 'metric')
+              .toString();
+    } catch (e) {
+      _error = e is ApiException ? e.message : e.toString();
+    }
+    if (mounted) setState(() => _loading = false);
   }
 
   Future<void> _edit() async {
     if (_user == null) return;
     final name = TextEditingController(text: _user!.name);
-    final email = TextEditingController(text: _user!.email);
-    final age = TextEditingController(text: _user!.age.toString());
+    final age = TextEditingController(text: _user!.age?.toString() ?? '');
     final height = TextEditingController(
-      text: _user!.heightCm.toStringAsFixed(0),
-    );
+        text: _user!.heightCm == null
+            ? ''
+            : (_unitSystem == 'imperial'
+                    ? Units.cmToIn(_user!.heightCm!)
+                    : _user!.heightCm!)
+                .toStringAsFixed(1));
     final saved = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit profile'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: name,
-                decoration: const InputDecoration(labelText: 'Full name'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: email,
-                decoration: const InputDecoration(labelText: 'Email'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: age,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Age'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: height,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Height (cm)'),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
+        context: context,
+        builder: (ctx) => AlertDialog(
+                title: const Text('Edit profile'),
+                content: SingleChildScrollView(
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  TextField(
+                      controller: name,
+                      decoration:
+                          const InputDecoration(labelText: 'Full name')),
+                  const SizedBox(height: 10),
+                  TextField(
+                      controller: age,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Age')),
+                  const SizedBox(height: 10),
+                  TextField(
+                      controller: height,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration: InputDecoration(
+                          labelText: _unitSystem == 'imperial'
+                              ? 'Height (in)'
+                              : 'Height (cm)'))
+                ])),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('Cancel')),
+                  FilledButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('Save'))
+                ]));
     if (saved == true) {
-      final parsedAge = int.tryParse(age.text);
-      final parsedHeight = double.tryParse(height.text);
-      if (name.text.trim().isNotEmpty &&
-          email.text.contains('@') &&
-          parsedAge != null &&
-          parsedAge > 0 &&
-          parsedHeight != null &&
-          parsedHeight > 0) {
-        await MockUserService.instance.updateProfile(
-          name: name.text.trim(),
-          email: email.text.trim(),
-          age: parsedAge,
-          heightCm: parsedHeight,
-        );
-        await _load();
+      final a = age.text.trim().isEmpty ? null : int.tryParse(age.text.trim());
+      final enteredH = height.text.trim().isEmpty
+          ? null
+          : double.tryParse(height.text.trim());
+      final h = enteredH == null
+          ? null
+          : (_unitSystem == 'imperial' ? Units.inToCm(enteredH) : enteredH);
+      if (name.text.trim().length < 2 ||
+          (age.text.trim().isNotEmpty && (a == null || a < 13 || a > 120)) ||
+          (height.text.trim().isNotEmpty &&
+              (h == null || h <= 50 || h > 280))) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text(
+                  'Please check the profile values. Age must be 13–120 and height 50–280 cm.')));
+        }
+      } else {
+        setState(() => _saving = true);
+        try {
+          await UserService.instance
+              .updateProfile(name: name.text.trim(), age: a, heightCm: h);
+          await _load();
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context)
+                .showSnackBar(SnackBar(content: Text(e.toString())));
+          }
+        }
+        if (mounted) setState(() => _saving = false);
       }
     }
     name.dispose();
-    email.dispose();
     age.dispose();
     height.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_user == null) return const Center(child: CircularProgressIndicator());
-    return ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        const SizedBox(height: 18),
-        const CircleAvatar(
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_user == null) {
+      return Center(child: Text(_error ?? 'Profile unavailable'));
+    }
+    return ListView(padding: const EdgeInsets.all(20), children: [
+      const SizedBox(height: 16),
+      const CircleAvatar(
           radius: 48,
           backgroundColor: AppTheme.primary,
-          child: Icon(Icons.person, size: 55, color: Colors.white),
-        ),
-        const SizedBox(height: 14),
-        Center(
-          child: Text(
-            _user!.name,
-            style: const TextStyle(fontSize: 23, fontWeight: FontWeight.bold),
-          ),
-        ),
-        Center(
-          child: Text(
-            _user!.email,
-            style: const TextStyle(color: Colors.white60),
-          ),
-        ),
-        const SizedBox(height: 28),
-        _info('Age', '${_user!.age} years', Icons.cake_outlined),
-        _info(
+          child: Icon(Icons.person, size: 54, color: Color(0xFF101820))),
+      const SizedBox(height: 14),
+      Center(
+          child: Text(_user!.name,
+              style:
+                  const TextStyle(fontSize: 23, fontWeight: FontWeight.bold))),
+      Center(
+          child: Text(_user!.email,
+              style: const TextStyle(color: AppTheme.textSecondary))),
+      const SizedBox(height: 26),
+      _info('Age', _user!.age == null ? 'Not set' : '${_user!.age} years',
+          Icons.cake_outlined),
+      _info(
           'Height',
-          '${_user!.heightCm.toStringAsFixed(0)} cm',
-          Icons.height,
-        ),
-        _info('User ID', _user!.id, Icons.badge_outlined),
-        const SizedBox(height: 20),
-        ElevatedButton.icon(
-          onPressed: _edit,
+          _user!.heightCm == null
+              ? 'Not set'
+              : Units.height(_user!.heightCm!, _unitSystem),
+          Icons.height),
+      _info('Account ID', '${_user!.id}', Icons.badge_outlined),
+      const SizedBox(height: 18),
+      FilledButton.icon(
+          onPressed: _saving ? null : _edit,
           icon: const Icon(Icons.edit_outlined),
-          label: const Text('Edit profile'),
-        ),
-      ],
-    );
+          label: Text(_saving ? 'Saving...' : 'Edit profile')),
+      if (_error != null)
+        Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child:
+                Text(_error!, style: const TextStyle(color: Colors.redAccent))),
+    ]);
   }
 
   Widget _info(String label, String value, IconData icon) => Card(
-    child: ListTile(
-      leading: Icon(icon, color: AppTheme.primary),
-      title: Text(
-        label,
-        style: const TextStyle(color: Colors.white60, fontSize: 12),
-      ),
-      subtitle: Text(value, style: const TextStyle(fontSize: 16)),
-    ),
-  );
+      child: ListTile(
+          leading: Icon(icon, color: AppTheme.primary),
+          title: Text(label,
+              style:
+                  const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+          subtitle: Text(value, style: const TextStyle(fontSize: 16))));
 }
