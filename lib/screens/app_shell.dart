@@ -21,7 +21,7 @@ class _AppShellState extends State<AppShell> {
   int _index = 0;
   String _name = 'BMI Tracker';
   List<Widget> get _pages => [
-        const HomeScreen(),
+        HomeScreen(isActive: _index == 0),
         HistoryScreen(isActive: _index == 1),
         const GoalsScreen(),
         ProfileScreen(onNameChanged: _updateName),

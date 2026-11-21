@@ -2,15 +2,21 @@ import 'package:flutter/material.dart';
 
 import '../models/bmi_record.dart';
 import '../models/user_model.dart';
-import '../services/mock_bmi_service.dart';
-import '../services/mock_user_service.dart';
+import '../services/bmi_service.dart';
+import '../services/user_service.dart';
+import '../services/api_client.dart';
 import '../theme/app_theme.dart';
 import '../widgets/bmi_result_card.dart';
 import '../widgets/bmi_comparison_card.dart';
 import '../widgets/bmi_chart.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final bool isActive;
+
+  const HomePage({
+    super.key,
+    this.isActive = false,
+  });
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -20,13 +26,11 @@ class _HomePageState extends State<HomePage> {
   final _heightController = TextEditingController(text: '175');
   final _weightController = TextEditingController(text: '70');
 
-  final _bmiService = MockBmiService.instance;
-  final _userService = MockUserService.instance;
-
   List<BmiRecord> _records = [];
   UserModel? _user;
 
-  bool _loading = false;
+  bool _loading = true;
+  bool _saving = false;
   String? _error;
 
   BmiRecord? get _latest => _records.isEmpty ? null : _records.first;
@@ -39,53 +43,100 @@ class _HomePageState extends State<HomePage> {
     _loadDashboard();
   }
 
-  Future<void> _loadDashboard() async {
-    final results = await Future.wait([
-      _bmiService.getHistory(),
-      _userService.getProfile(),
-    ]);
+  @override
+  void didUpdateWidget(covariant HomePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
 
+    if (!oldWidget.isActive && widget.isActive) {
+      _loadDashboard();
+    }
+  }
+
+  Future<void> _loadDashboard() async {
     if (!mounted) return;
 
     setState(() {
-      _records = results[0] as List<BmiRecord>;
-      _user = results[1] as UserModel;
+      _loading = true;
+      _error = null;
     });
+
+    try {
+      final results = await Future.wait([
+        BmiService.instance.history(),
+        UserService.instance.getProfile(),
+      ]);
+
+      if (!mounted) return;
+
+      setState(() {
+        _records = results[0] as List<BmiRecord>;
+        _user = results[1] as UserModel;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _error = e is ApiException ? e.message : e.toString();
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
   }
 
   Future<void> _calculate() async {
+    if (_saving) return;
+
     final height = double.tryParse(_heightController.text.trim());
     final weight = double.tryParse(_weightController.text.trim());
 
     if (height == null ||
         weight == null ||
         height < 50 ||
-        height > 250 ||
+        height > 280 ||
         weight < 10 ||
         weight > 500) {
       setState(() {
-        _error = 'Enter a valid height (50–250 cm) and weight (10–500 kg).';
+        _error = 'Enter a valid height (50–280 cm) and weight (10–500 kg).';
       });
       return;
     }
 
     setState(() {
+      _saving = true;
       _error = null;
-      _loading = true;
     });
 
-    await _bmiService.addRecord(heightCm: height, weightKg: weight);
+    try {
+      final record = await BmiService.instance.create(
+        heightCm: height,
+        weightKg: weight,
+      );
 
-    await _loadDashboard();
+      if (!mounted) return;
 
-    if (mounted) {
-      setState(() => _loading = false);
+      await _loadDashboard();
+
+      if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Your new BMI measurement has been saved.'),
+        SnackBar(
+          content: Text(
+            'BMI ${record.bmi.toStringAsFixed(1)} saved successfully.',
+          ),
         ),
       );
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _error = e is ApiException ? e.message : e.toString();
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
     }
   }
 
@@ -98,14 +149,22 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final userName = _user?.name.split(' ').first ?? 'there';
+    final userName = (_user?.name.trim().isNotEmpty == true)
+        ? _user!.name.trim().split(' ').first
+        : 'there';
+
+    if (_loading && _user == null && _records.isEmpty) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
 
     return RefreshIndicator(
       onRefresh: _loadDashboard,
       child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(18, 12, 18, 28),
         children: [
-          // Welcome header
           Row(
             children: [
               Expanded(
@@ -138,14 +197,13 @@ class _HomePageState extends State<HomePage> {
               ),
             ],
           ),
-
-          const SizedBox(height: 26),
-
-          // BMI overview
+          const SizedBox(height: 20),
+          if (_error != null) ...[
+            _errorCard(),
+            const SizedBox(height: 18),
+          ],
           _sectionTitle('BMI overview', 'Your latest measurement'),
-
           const SizedBox(height: 12),
-
           if (_latest != null)
             BmiResultCard(record: _latest!)
           else
@@ -153,14 +211,9 @@ class _HomePageState extends State<HomePage> {
               'No BMI measurements yet.',
               'Calculate your first BMI to see your results here.',
             ),
-
           const SizedBox(height: 22),
-
-          // Statistics
           _sectionTitle('Your statistics', 'A quick look at your progress'),
-
           const SizedBox(height: 12),
-
           Row(
             children: [
               Expanded(
@@ -184,18 +237,11 @@ class _HomePageState extends State<HomePage> {
               ),
             ],
           ),
-
           const SizedBox(height: 10),
-
           _buildBmiChangeCard(),
-
           const SizedBox(height: 24),
-
-          // BMI chart
           _sectionTitle('BMI progress', 'Your recent measurements'),
-
           const SizedBox(height: 12),
-
           if (_records.isNotEmpty)
             BmiChart(records: _records)
           else
@@ -203,23 +249,19 @@ class _HomePageState extends State<HomePage> {
               'No progress to display',
               'Your BMI chart will appear after your first measurement.',
             ),
-
           const SizedBox(height: 24),
-
-          // Comparison
-          _sectionTitle('Previous comparison', 'Compare your latest results'),
-
+          _sectionTitle(
+            'Previous comparison',
+            'Compare your latest results',
+          ),
           const SizedBox(height: 12),
-
-          BmiComparisonCard(latest: _latest, previous: _previous),
-
+          BmiComparisonCard(
+            latest: _latest,
+            previous: _previous,
+          ),
           const SizedBox(height: 24),
-
-          // Calculator
           _sectionTitle('New measurement', 'Calculate your BMI'),
-
           const SizedBox(height: 12),
-
           Card(
             child: Padding(
               padding: const EdgeInsets.all(18),
@@ -245,22 +287,12 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ],
                   ),
-                  if (_error != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      _error!,
-                      style: const TextStyle(
-                        color: Colors.redAccent,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
                   const SizedBox(height: 18),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: _loading ? null : _calculate,
-                      icon: _loading
+                      onPressed: _saving ? null : _calculate,
+                      icon: _saving
                           ? const SizedBox(
                               height: 18,
                               width: 18,
@@ -271,7 +303,7 @@ class _HomePageState extends State<HomePage> {
                             )
                           : const Icon(Icons.calculate_outlined),
                       label: Text(
-                        _loading ? 'Calculating...' : 'Calculate BMI',
+                        _saving ? 'Saving...' : 'Calculate BMI',
                       ),
                     ),
                   ),
@@ -279,14 +311,12 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
           ),
-
           const SizedBox(height: 24),
-
-          // BMI categories
-          _sectionTitle('BMI categories', 'General adult reference ranges'),
-
+          _sectionTitle(
+            'BMI categories',
+            'General adult reference ranges',
+          ),
           const SizedBox(height: 12),
-
           const _CategoryTile(
             title: 'Underweight',
             range: 'Below 18.5',
@@ -307,15 +337,48 @@ class _HomePageState extends State<HomePage> {
             range: '30.0 or above',
             color: Colors.redAccent,
           ),
-
           const SizedBox(height: 12),
-
           const Text(
             'BMI is a screening measure, not a diagnosis. It does not '
             'directly measure body fat or distinguish muscle from fat.',
-            style: TextStyle(color: Colors.white54, fontSize: 11, height: 1.5),
+            style: TextStyle(
+              color: Colors.white54,
+              fontSize: 11,
+              height: 1.5,
+            ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _errorCard() {
+    return Card(
+      color: Theme.of(context).colorScheme.errorContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Icon(
+              Icons.error_outline,
+              color: Theme.of(context).colorScheme.onErrorContainer,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                _error!,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onErrorContainer,
+                ),
+              ),
+            ),
+            IconButton(
+              onPressed: _loading ? null : _loadDashboard,
+              icon: const Icon(Icons.refresh),
+              tooltip: 'Retry',
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -349,7 +412,10 @@ class _HomePageState extends State<HomePage> {
     return TextField(
       controller: controller,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      decoration: InputDecoration(labelText: label, suffixText: unit),
+      decoration: InputDecoration(
+        labelText: label,
+        suffixText: unit,
+      ),
     );
   }
 
@@ -359,12 +425,18 @@ class _HomePageState extends State<HomePage> {
       children: [
         Text(
           title,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         const SizedBox(height: 4),
         Text(
           subtitle,
-          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+          style: const TextStyle(
+            color: AppTheme.textSecondary,
+            fontSize: 12,
+          ),
         ),
       ],
     );
@@ -382,12 +454,18 @@ class _HomePageState extends State<HomePage> {
               color: AppTheme.primary,
             ),
             const SizedBox(height: 10),
-            Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+            Text(
+              title,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
             const SizedBox(height: 5),
             Text(
               subtitle,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white54, fontSize: 12),
+              style: const TextStyle(
+                color: Colors.white54,
+                fontSize: 12,
+              ),
             ),
           ],
         ),
@@ -421,16 +499,25 @@ class _StatCard extends StatelessWidget {
             const SizedBox(height: 13),
             Text(
               title,
-              style: const TextStyle(color: Colors.white60, fontSize: 12),
+              style: const TextStyle(
+                color: Colors.white60,
+                fontSize: 12,
+              ),
             ),
             const SizedBox(height: 5),
             Text(
               value,
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             Text(
               unit,
-              style: const TextStyle(color: Colors.white54, fontSize: 10),
+              style: const TextStyle(
+                color: Colors.white54,
+                fontSize: 10,
+              ),
             ),
           ],
         ),
@@ -463,8 +550,14 @@ class _CategoryTile extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
           ),
         ),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-        trailing: Text(range, style: const TextStyle(color: Colors.white60)),
+        title: Text(
+          title,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        trailing: Text(
+          range,
+          style: const TextStyle(color: Colors.white60),
+        ),
       ),
     );
   }
