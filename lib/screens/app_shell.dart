@@ -24,7 +24,7 @@ class _AppShellState extends State<AppShell> {
         const HomeScreen(),
         HistoryScreen(isActive: _index == 1),
         const GoalsScreen(),
-        const ProfileScreen(),
+        ProfileScreen(onNameChanged: _updateName),
         SettingsScreen(onThemeChanged: widget.onThemeChanged),
         const AboutScreen(),
       ];
@@ -43,6 +43,14 @@ class _AppShellState extends State<AppShell> {
     _loadName();
   }
 
+  void _updateName(String newName) {
+    if (!mounted) return;
+
+    setState(() {
+      _name = newName;
+    });
+  }
+
   Future<void> _loadName() async {
     try {
       final user = await AuthService.instance.me();
@@ -53,7 +61,19 @@ class _AppShellState extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_titles[_index]), centerTitle: true),
+      appBar: AppBar(
+        centerTitle: true,
+        title: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(_titles[_index]),
+            Text(
+              _name,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
       drawer: NavigationDrawer(
         selectedIndex: _index,
         onDestinationSelected: (i) {

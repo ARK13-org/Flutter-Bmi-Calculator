@@ -7,7 +7,13 @@ import '../utils/units.dart';
 import '../theme/app_theme.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  final ValueChanged<String>? onNameChanged;
+
+  const ProfileScreen({
+    super.key,
+    this.onNameChanged,
+  });
+
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
@@ -33,6 +39,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final values = await Future.wait(
           [UserService.instance.getProfile(), SettingsService.instance.get()]);
       _user = values[0] as UserModel;
+      widget.onNameChanged?.call(_user!.name);
       _unitSystem =
           ((values[1] as Map<String, dynamic>)['unit_system'] ?? 'metric')
               .toString();
@@ -106,9 +113,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
       } else {
         setState(() => _saving = true);
         try {
-          await UserService.instance
-              .updateProfile(name: name.text.trim(), age: a, heightCm: h);
-          await _load();
+          final updatedUser = await UserService.instance.updateProfile(
+            name: name.text.trim(),
+            age: a,
+            heightCm: h,
+          );
+
+          if (mounted) {
+            setState(() {
+              _user = updatedUser;
+            });
+
+            widget.onNameChanged?.call(updatedUser.name);
+          }
         } catch (e) {
           if (mounted) {
             ScaffoldMessenger.of(context)
